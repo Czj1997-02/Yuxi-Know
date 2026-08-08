@@ -585,21 +585,20 @@ class MCPServer(Base):
         import json
 
         config = {"transport": self.transport}
-        if self.url:
+        if self.transport in ("sse", "streamable_http") and self.url:
             config["url"] = self.url
-        if self.command:
-            config["command"] = self.command
-        # args 只用于 stdio 传输类型，必须是列表
-        if self.transport == "stdio" and self.args:
-            if isinstance(self.args, list):
-                config["args"] = self.args
-            elif isinstance(self.args, str):
-                try:
-                    config["args"] = json.loads(self.args)
-                except json.JSONDecodeError:
-                    pass
-        if self.transport == "stdio" and self.env:
-            if isinstance(self.env, dict):
+        if self.transport == "stdio":
+            if self.command:
+                config["command"] = self.command
+            if self.args:
+                if isinstance(self.args, list):
+                    config["args"] = self.args
+                elif isinstance(self.args, str):
+                    try:
+                        config["args"] = json.loads(self.args)
+                    except json.JSONDecodeError:
+                        pass
+            if self.env and isinstance(self.env, dict):
                 config["env"] = self.env
             elif isinstance(self.env, str):
                 try:

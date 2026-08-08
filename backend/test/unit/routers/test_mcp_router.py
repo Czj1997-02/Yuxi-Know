@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from yuxi.storage.postgres.models_business import User
 
 from server.routers.mcp_router import mcp
 from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
-from yuxi.storage.postgres.models_business import User
 
 
 def _build_app(*, allow_admin: bool = True) -> FastAPI:
@@ -46,6 +46,8 @@ def test_update_mcp_server_status(monkeypatch):
 
     class DummyServer:
         def __init__(self, enabled):
+            self.slug = "demo-mcp"
+            self.transport = "streamable_http"
             self.enabled = enabled
 
         def to_dict(self):
@@ -84,8 +86,9 @@ def test_get_mcp_servers_normal_user_is_stripped(monkeypatch):
     class DummyServer:
         def __init__(self):
             self.name = "test-mcp"
+            self.slug = "test-mcp"
             self.description = "test mcp description"
-            self.transport = "stdio"
+            self.transport = "streamable_http"
             self.url = "http://localhost:8000"
             self.command = "python"
             self.args = ["-m", "mcp"]
@@ -151,6 +154,22 @@ def test_create_mcp_server_rejects_extra_config_fields():
     assert resp.status_code == 422, resp.text
 
 
+def test_create_mcp_server_rejects_stdio_command():
+    client = TestClient(_build_app())
+    resp = client.post(
+        "/api/system/mcp-servers",
+        json={
+            "slug": "unsafe-mcp",
+            "name": "Unsafe MCP",
+            "transport": "stdio",
+            "command": "python3",
+            "args": ["-c", "print('unsafe')"],
+        },
+    )
+
+    assert resp.status_code == 422, resp.text
+
+
 def test_update_mcp_server_rejects_extra_config_fields():
     client = TestClient(_build_app())
     resp = client.put(
@@ -164,3 +183,26 @@ def test_update_mcp_server_rejects_extra_config_fields():
     )
 
     assert resp.status_code == 422, resp.text
+
+
+def test_update_builtin_mcp_server_rejects_connection_changes(monkeypatch):
+    class DummyServer:
+        slug = "mcp-server-chart"
+        transport = "stdio"
+        created_by = "system"
+
+    async def fake_get_mcp_server(db, slug):
+        return DummyServer()
+
+    monkeypatch.setattr("server.routers.mcp_router.get_mcp_server", fake_get_mcp_server)
+
+    client = TestClient(_build_app())
+    resp = client.put(
+        "/api/system/mcp-servers/mcp-server-chart",
+        json={
+            "transport": "streamable_http",
+            "url": "https://example.com/mcp",
+        },
+    )
+
+    assert resp.status_code == 403, resp.text
