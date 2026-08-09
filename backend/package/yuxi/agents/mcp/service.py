@@ -480,6 +480,10 @@ async def update_mcp_server(
     if next_transport not in _USER_CONFIGURABLE_TRANSPORTS:
         raise ValueError("用户创建的 MCP 仅支持 sse 或 streamable_http，不允许启动 stdio 本地进程")
 
+    next_url = url if url is not None else server.url
+    if not next_url or not next_url.strip():
+        raise ValueError(f"传输类型为 {next_transport} 时，url 必填")
+
     if name is not None:
         server.name = name
     if description is not None:

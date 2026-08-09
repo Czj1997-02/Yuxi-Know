@@ -235,6 +235,32 @@ async def test_update_builtin_mcp_server_rejects_connection_changes(mcp_session)
     assert server.command == "trusted-command"
 
 
+async def test_update_legacy_stdio_requires_remote_url(mcp_session):
+    legacy_server = MCPServer(
+        slug="legacy-stdio",
+        name="历史 stdio",
+        transport="stdio",
+        command="python3",
+        enabled=0,
+        created_by="admin",
+        updated_by="admin",
+    )
+    mcp_session.add(legacy_server)
+    await mcp_session.commit()
+
+    with pytest.raises(ValueError, match="url 必填"):
+        await mcp_service.update_mcp_server(
+            mcp_session,
+            slug="legacy-stdio",
+            transport="streamable_http",
+            updated_by="admin",
+        )
+
+    await mcp_session.refresh(legacy_server)
+    assert legacy_server.transport == "stdio"
+    assert legacy_server.command == "python3"
+
+
 async def test_get_enabled_mcp_tools_loads_latest_config_from_db(monkeypatch):
     captured: list[dict] = []
 
