@@ -6,7 +6,6 @@ import types
 from dataclasses import dataclass, field
 
 import pytest
-
 from yuxi.knowledge.read_models import KnowledgeBaseSummary
 
 
@@ -141,6 +140,10 @@ async def test_normalize_agent_context_config_expands_null_and_filters_explicit_
             types.SimpleNamespace(slug="mcp-b", name="MCP B", description="", enabled=True),
         ]
 
+    async def fake_get_enabled_mcp_server_slugs(*, db=None):
+        del db
+        return ["mcp-a"]
+
     async def fake_list_skills(_db, _user):
         return [
             types.SimpleNamespace(slug="skill-a", name="Skill A", description=""),
@@ -176,7 +179,10 @@ async def test_normalize_agent_context_config_expands_null_and_filters_explicit_
     monkeypatch.setitem(
         sys.modules,
         "yuxi.agents.mcp.service",
-        types.SimpleNamespace(get_all_mcp_servers=fake_get_all_mcp_servers),
+        types.SimpleNamespace(
+            get_all_mcp_servers=fake_get_all_mcp_servers,
+            get_enabled_mcp_server_slugs=fake_get_enabled_mcp_server_slugs,
+        ),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -209,7 +215,7 @@ async def test_normalize_agent_context_config_expands_null_and_filters_explicit_
 
     assert normalized["tools"] == ["ask_user_question", "web_search"]
     assert normalized["knowledges"] == ["kb-b"]
-    assert normalized["mcps"] == ["mcp-a", "mcp-b"]
+    assert normalized["mcps"] == ["mcp-a"]
     assert normalized["skills"] == []
     assert normalized["subagents"] == ["research-agent"]
     assert "summary_threshold" not in normalized
@@ -235,6 +241,10 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
 
     async def fake_get_all_mcp_servers(_db):
         return [types.SimpleNamespace(slug="mcp-a", name="MCP A", description="", enabled=True)]
+
+    async def fake_get_enabled_mcp_server_slugs(*, db=None):
+        del db
+        return ["mcp-a"]
 
     async def fake_list_skills(_db, _user):
         return [
@@ -316,7 +326,10 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
     monkeypatch.setitem(
         sys.modules,
         "yuxi.agents.mcp.service",
-        types.SimpleNamespace(get_all_mcp_servers=fake_get_all_mcp_servers),
+        types.SimpleNamespace(
+            get_all_mcp_servers=fake_get_all_mcp_servers,
+            get_enabled_mcp_server_slugs=fake_get_enabled_mcp_server_slugs,
+        ),
     )
     monkeypatch.setitem(
         sys.modules,
