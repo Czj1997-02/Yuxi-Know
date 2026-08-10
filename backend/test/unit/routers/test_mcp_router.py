@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from yuxi.agents.mcp.service import MCPServerNotFoundError
 from yuxi.storage.postgres.models_business import User
 
 from server.routers.mcp_router import mcp
@@ -73,13 +74,24 @@ def test_update_mcp_server_status(monkeypatch):
 
 def test_update_mcp_server_status_not_found(monkeypatch):
     async def fake_set_server_enabled(db, name, enabled, updated_by=None):
-        raise ValueError(f"Server '{name}' does not exist")
+        raise MCPServerNotFoundError(f"Server '{name}' does not exist")
 
     monkeypatch.setattr("server.routers.mcp_router.set_server_enabled", fake_set_server_enabled)
 
     client = TestClient(_build_app())
     resp = client.put("/api/system/mcp-servers/missing/status", json={"enabled": True})
     assert resp.status_code == 404, resp.text
+
+
+def test_update_mcp_server_status_rejects_legacy_stdio(monkeypatch):
+    async def fake_set_server_enabled(db, name, enabled, updated_by=None):
+        raise ValueError("历史 stdio MCP 已被禁用")
+
+    monkeypatch.setattr("server.routers.mcp_router.set_server_enabled", fake_set_server_enabled)
+
+    client = TestClient(_build_app())
+    resp = client.put("/api/system/mcp-servers/legacy-stdio/status", json={"enabled": True})
+    assert resp.status_code == 400, resp.text
 
 
 def test_get_mcp_servers_normal_user_is_stripped(monkeypatch):
@@ -186,15 +198,10 @@ def test_update_mcp_server_rejects_extra_config_fields():
 
 
 def test_update_builtin_mcp_server_rejects_connection_changes(monkeypatch):
-    class DummyServer:
-        slug = "mcp-server-chart"
-        transport = "stdio"
-        created_by = "system"
+    async def fake_update_mcp_server(db, slug, **kwargs):
+        raise PermissionError("系统内置 MCP 的连接配置由代码管理，无法通过接口修改")
 
-    async def fake_get_mcp_server(db, slug):
-        return DummyServer()
-
-    monkeypatch.setattr("server.routers.mcp_router.get_mcp_server", fake_get_mcp_server)
+    monkeypatch.setattr("server.routers.mcp_router.update_mcp_server", fake_update_mcp_server)
 
     client = TestClient(_build_app())
     resp = client.put(
@@ -206,3 +213,18 @@ def test_update_builtin_mcp_server_rejects_connection_changes(monkeypatch):
     )
 
     assert resp.status_code == 403, resp.text
+
+
+def test_update_mcp_server_not_found(monkeypatch):
+    async def fake_update_mcp_server(db, slug, **kwargs):
+        raise MCPServerNotFoundError(f"Server '{slug}' does not exist")
+
+    monkeypatch.setattr("server.routers.mcp_router.update_mcp_server", fake_update_mcp_server)
+
+    client = TestClient(_build_app())
+    resp = client.put(
+        "/api/system/mcp-servers/missing",
+        json={"name": "Missing MCP"},
+    )
+
+    assert resp.status_code == 404, resp.text

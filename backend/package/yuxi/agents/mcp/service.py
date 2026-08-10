@@ -66,6 +66,10 @@ _SYNCED_MCP_FIELDS = (
 )
 
 
+class MCPServerNotFoundError(ValueError):
+    """表示指定的 MCP 服务器不存在。"""
+
+
 def is_builtin_mcp_server(server: MCPServer) -> bool:
     """判断 MCP 是否由代码中的内置定义管理。"""
     return server.slug in _BUILTIN_MCP_SERVER_SLUGS
@@ -472,7 +476,7 @@ async def update_mcp_server(
     """Update server configuration."""
     server = await get_mcp_server(db, slug)
     if not server:
-        raise ValueError(f"Server '{slug}' does not exist")
+        raise MCPServerNotFoundError(f"Server '{slug}' does not exist")
     if is_builtin_mcp_server(server):
         raise PermissionError("系统内置 MCP 的连接配置由代码管理，无法通过接口修改")
 
@@ -543,7 +547,7 @@ async def set_server_enabled(
     """Set server enabled status."""
     server = await get_mcp_server(db, slug)
     if not server:
-        raise ValueError(f"Server '{slug}' does not exist")
+        raise MCPServerNotFoundError(f"Server '{slug}' does not exist")
     if enabled and requires_mcp_stdio_migration(server):
         raise ValueError("历史 stdio MCP 已被禁用，请改为 sse 或 streamable_http 后再启用")
 
@@ -578,7 +582,7 @@ async def toggle_tool_enabled(
     """
     server = await get_mcp_server(db, server_slug)
     if not server:
-        raise ValueError(f"Server '{server_slug}' does not exist")
+        raise MCPServerNotFoundError(f"Server '{server_slug}' does not exist")
 
     disabled_tools = list(server.disabled_tools or [])
 

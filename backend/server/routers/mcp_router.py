@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.agents.mcp.service import (
+    MCPServerNotFoundError,
     create_mcp_server,
     delete_mcp_server,
     get_all_mcp_servers,
@@ -194,10 +195,6 @@ async def update_mcp_server_route(
         raise HTTPException(status_code=400, detail=f"传输类型必须是 {', '.join(valid_transports)} 之一")
 
     try:
-        existing = await get_server_or_404(db, slug)
-        if is_builtin_mcp_server(existing):
-            raise HTTPException(status_code=403, detail="系统内置 MCP 的连接配置由代码管理，无法通过接口修改")
-
         server = await update_mcp_server(
             db,
             slug=slug,
@@ -215,6 +212,8 @@ async def update_mcp_server_route(
         return {"success": True, "data": serialize_mcp_server(server)}
     except HTTPException:
         raise
+    except MCPServerNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except PermissionError as pe:
         raise HTTPException(status_code=403, detail=str(pe))
     except ValueError as ve:
@@ -296,9 +295,10 @@ async def update_mcp_server_status_route(
             "data": serialize_mcp_server(server),
             "message": f"MCP '{slug}' 已{'添加' if is_enabled else '移除'}",
         }
+    except MCPServerNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as ve:
-        status_code = 404 if "does not exist" in str(ve) else 400
-        raise HTTPException(status_code=status_code, detail=str(ve))
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         logger.error(f"Failed to toggle MCP server: {e}")
         raise HTTPException(status_code=500, detail=str(e))
